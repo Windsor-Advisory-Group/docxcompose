@@ -234,10 +234,23 @@ class Composer(object):
         footnotes = parse_xml(my_footnote_part.blob)
         next_id = len(footnotes) + 1
 
+        # Parse the source footnotes part only once, no matter how many
+        # footnote references there are, and index its footnotes by id so
+        # that each reference is a constant time lookup instead of a full
+        # re-parse of the (untrusted, potentially huge) part.
+        element = parse_xml(footnote_part.blob)
+        footnotes_by_id = {}
+        for source_footnote in element.findall('.//w:footnote', NS):
+            source_id = source_footnote.get('{%s}id' % NS['w'])
+            if source_id is None:
+                continue
+            # Keep the first footnote for an id, matching the document order
+            # semantics of ElementTree's find().
+            footnotes_by_id.setdefault(source_id, source_footnote)
+
         for ref in footnotes_refs:
             id_ = ref.get('{%s}id' % NS['w'])
-            element = parse_xml(footnote_part.blob)
-            footnote = deepcopy(element.find('.//w:footnote[@w:id="%s"]' % id_, NS))
+            footnote = deepcopy(footnotes_by_id.get(id_))
             footnotes.append(footnote)
             footnote.set('{%s}id' % NS['w'], str(next_id))
             ref.set('{%s}id' % NS['w'], str(next_id))

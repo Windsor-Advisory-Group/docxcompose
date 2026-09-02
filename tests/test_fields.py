@@ -2,6 +2,7 @@ from babel.dates import format_datetime
 from datetime import datetime
 from docxcompose.properties import FieldBase
 from docxcompose.utils import word_to_python_date_format
+import time
 
 
 class FieldForTesting(FieldBase):
@@ -35,6 +36,36 @@ class TestFieldNameParsing(object):
     def test_can_parse_unquoted_property_names_with_extra_spaces(self):
         node = ' DOCPROPERTY  Text Property  \\* MERGEFORMAT '
         assert FieldForTesting(node).name == "Text Property"
+
+
+class TestFieldCodeParsingPerformance(object):
+    """The field code is text coming from the document, thus parsing it must
+    stay linear in its length, whether it is a docproperty field or not.
+    """
+
+    def assert_parsed_quickly(self, node, expected_name):
+        started = time.time()
+        field = FieldForTesting(node)
+        duration = time.time() - started
+
+        assert field.name == expected_name
+        assert duration < 5, \
+            'parsing the field code took {} seconds'.format(duration)
+
+    def test_field_code_consisting_of_spaces(self):
+        self.assert_parsed_quickly(' DOCPROPERTY ' + ' ' * 20000, None)
+
+    def test_field_code_with_spaces_and_an_unknown_switch(self):
+        self.assert_parsed_quickly(
+            ' DOCPROPERTY ' + ' ' * 20000 + '\\x \\* MERGEFORMAT ', None)
+
+    def test_field_code_with_repeated_keyword(self):
+        self.assert_parsed_quickly('DOCPROPERTY' * 2000, None)
+
+    def test_field_code_with_a_long_property_name(self):
+        name = 'a' * 20000
+        self.assert_parsed_quickly(
+            ' DOCPROPERTY "' + name + '" \\* MERGEFORMAT ', name)
 
 
 class TestFieldDateFormatParsing(object):

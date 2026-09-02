@@ -16,7 +16,6 @@ from lxml.etree import FunctionNamespace
 from lxml.etree import QName
 from six import binary_type
 from six import text_type
-import re
 
 
 CUSTOM_PROPERTY_FMTID = '{D5CDD505-2E9C-101B-9397-08002B2CF9AE}'
@@ -339,9 +338,14 @@ class CustomProperties(object):
 class FieldBase(object):
     """Class used to represent a docproperty field in the document.xml.
     """
-    fieldname_and_format_search_expr = re.compile(
-        r'DOCPROPERTY +"{0,1}([^\\]*?)"{0,1} +(?:\\\@ +"{0,1}([^\\]*?)"{0,1} +){0,1}\\\* MERGEFORMAT',
-        flags=re.UNICODE)
+    # The parts of a docproperty field code, i.e. of something like
+    # ` DOCPROPERTY "Property name"  \@ "dd.MM.yyyy" \* MERGEFORMAT `.
+    FIELD_CODE_KEYWORD = u'DOCPROPERTY'
+    DATE_FORMAT_SWITCH = u'\\@'
+    MERGEFORMAT_SWITCH = u'\\* MERGEFORMAT'
+    SWITCH_PREFIX = u'\\'
+    ARGUMENT_SEPARATOR = u' '
+    ARGUMENT_QUOTE = u'"'
 
     def __init__(self, field_node):
         self.node = field_node
@@ -376,11 +380,78 @@ class FieldBase(object):
         raise NotImplementedError()
 
     def _parse_fieldname_and_format(self):
-        match = self.fieldname_and_format_search_expr.search(
-            self._get_fieldname_string())
-        if match is None:
-            return None, None
-        return match.groups()
+        """Parse the field name and the optional date format out of the
+        field code.
+
+        The field code is text coming from the document, i.e. it is neither
+        trusted nor bounded in length. It is therefore scanned by looking up
+        each part of the field code exactly once, instead of with a regular
+        expression whose ambiguous quantifiers could be driven into
+        catastrophic backtracking by a crafted document.
+        """
+        text = self._get_fieldname_string()
+        keyword_length = len(self.FIELD_CODE_KEYWORD)
+        search_from = 0
+        # Position of the first switch (i.e. backslash) following the keyword.
+        # An argument of the field code cannot contain a backslash, so this is
+        # where the field name ends. The position is only ever advanced, which
+        # is what keeps the whole scan linear.
+        switch = -1
+        while True:
+            keyword = text.find(self.FIELD_CODE_KEYWORD, search_from)
+            if keyword == -1:
+                return None, None
+            search_from = keyword + 1
+            name_start = keyword + keyword_length
+            if switch < name_start:
+                switch = text.find(self.SWITCH_PREFIX, name_start)
+                if switch == -1:
+                    # No switch follows this keyword, thus none can follow a
+                    # later occurrence of the keyword either.
+                    return None, None
+            if not self._is_field_argument(text, name_start, switch):
+                continue
+            if text.startswith(self.MERGEFORMAT_SWITCH, switch):
+                return (
+                    self._unquote_field_argument(text, name_start, switch),
+                    None)
+            if not text.startswith(self.DATE_FORMAT_SWITCH, switch):
+                continue
+            format_start = switch + len(self.DATE_FORMAT_SWITCH)
+            format_switch = text.find(self.SWITCH_PREFIX, format_start)
+            if format_switch == -1:
+                continue
+            if not self._is_field_argument(text, format_start, format_switch):
+                continue
+            if not text.startswith(self.MERGEFORMAT_SWITCH, format_switch):
+                continue
+            return (
+                self._unquote_field_argument(text, name_start, switch),
+                self._unquote_field_argument(
+                    text, format_start, format_switch))
+
+    @classmethod
+    def _is_field_argument(cls, text, start, end):
+        """An argument of the field code is separated from the preceding
+        keyword or switch and from the following switch by at least one
+        space each.
+        """
+        return (end - start >= 2
+                and text[start] == cls.ARGUMENT_SEPARATOR
+                and text[end - 1] == cls.ARGUMENT_SEPARATOR)
+
+    @classmethod
+    def _unquote_field_argument(cls, text, start, end):
+        """Strip the separating spaces and the optional quotes from an
+        argument of the field code.
+        """
+        argument = text[start:end].lstrip(cls.ARGUMENT_SEPARATOR)
+        if argument[:1] == cls.ARGUMENT_QUOTE:
+            argument = argument[1:]
+        argument = argument.rstrip(cls.ARGUMENT_SEPARATOR)
+        if argument[-1:] == cls.ARGUMENT_QUOTE:
+            argument = argument[:-1]
+        return argument
 
 
 class SimpleField(FieldBase):
