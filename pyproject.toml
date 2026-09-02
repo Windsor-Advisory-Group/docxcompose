@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docxcompose"
+version = "1.4.1.dev0"
+description = "Compose .docx documents"
+readme = { file = "README.rst", content-type = "text/x-rst" }
+license = { text = "MIT license" }
+authors = [
+    { name = "Thomas Buchberger", email = "t.buchberger@4teamwork.ch" },
+]
+keywords = ["Python", "DOCX", "Word", "OOXML"]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "lxml",
+    "python-docx >= 0.8.8",
+    "six",
+    "babel",
+]
+
+[project.urls]
+Homepage = "https://github.com/4teamwork/docxcompose"
+
+[project.scripts]
+docxcompose = "docxcompose.command:main"
+
+[project.optional-dependencies]
+test = ["pytest"]
+tests = ["pytest"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["docxcompose*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+docxcompose = ["templates/*.xml"]
