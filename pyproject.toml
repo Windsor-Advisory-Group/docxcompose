@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "License :: OSI Approved :: MIT License",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "lxml",
     "python-docx >= 0.8.8",
